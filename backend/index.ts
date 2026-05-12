@@ -252,7 +252,7 @@ app.put('/api/tasks/:id', authMiddleware, async (req: any, res: any) => {
     if (!existing) return res.status(404).json({ error: 'Task not found' });
 
     const isMember = await prisma.projectMember.findFirst({
-      where: { projectId: existing.projectId, userId: req.user.id }
+      where: { projectId: existing.projectId ?? undefined, userId: req.user.id }
     });
 
     if (req.user.role !== 'admin' && existing.assigneeId !== req.user.id) {
@@ -383,7 +383,7 @@ async function seedUsers() {
   }
 }
 
-app.listen(PORT, '0.0.0.0', async () => {
+app.listen(Number(PORT), '0.0.0.0', async () => {
   await seedUsers();
   console.log(`Server running on http://0.0.0.0:${PORT}`);
 });

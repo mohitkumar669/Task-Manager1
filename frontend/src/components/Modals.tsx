@@ -32,6 +32,7 @@ export default function Modals({ isOpen, onClose, user, onSuccess, selectedTask,
   const [taskDue, setTaskDue] = useState('');
   const [projects, setProjects] = useState<any[]>([]);
   const [selectedProject, setSelectedProject] = useState('');
+  const [taskAssignee, setTaskAssignee] = useState(user.id);
 
   useEffect(() => {
     if (isOpen) {
@@ -49,12 +50,14 @@ export default function Modals({ isOpen, onClose, user, onSuccess, selectedTask,
       setTaskPriority(selectedTask.priority || 'medium');
       setTaskDue(selectedTask.dueDate ? new Date(selectedTask.dueDate).toISOString().split('T')[0] : '');
       setSelectedProject(selectedTask.projectId || '');
+      setTaskAssignee(selectedTask.assigneeId || user.id);
     } else if (isOpen === 'task' && !selectedTask) {
       setTaskTitle('');
       setTaskDesc('');
       setTaskStatus('todo');
       setTaskPriority('medium');
       setTaskDue('');
+      setTaskAssignee(user.id);
     }
   }, [isOpen, selectedTask]);
 
@@ -123,6 +126,7 @@ export default function Modals({ isOpen, onClose, user, onSuccess, selectedTask,
           priority: taskPriority,
           dueDate: taskDue || null,
           projectId: selectedProject || null,
+          assigneeId: taskAssignee
         });
       } else {
         await api.post('/tasks', {
@@ -132,7 +136,7 @@ export default function Modals({ isOpen, onClose, user, onSuccess, selectedTask,
           priority: taskPriority,
           dueDate: taskDue || null,
           projectId: selectedProject || null,
-          assigneeId: user.id
+          assigneeId: taskAssignee
         });
       }
       onSuccess();
@@ -143,6 +147,7 @@ export default function Modals({ isOpen, onClose, user, onSuccess, selectedTask,
       setTaskStatus('todo');
       setTaskPriority('medium');
       setTaskDue('');
+      setTaskAssignee(user.id);
     } catch (err) {
       console.error(err);
       alert('Failed to save task');
@@ -262,6 +267,22 @@ export default function Modals({ isOpen, onClose, user, onSuccess, selectedTask,
                   <option value="low">Low</option>
                 </select>
               </div>
+              {user.role === 'admin' && (
+                <div className="form-group">
+                  <label>Assignee</label>
+                  <select value={taskAssignee} onChange={e => setTaskAssignee(e.target.value)}>
+                    <option value={user.id}>Me ({user.name})</option>
+                    {selectedProject 
+                      ? projects.find(p => p.id === selectedProject)?.members.map((m: any) => m.userId !== user.id && (
+                          <option key={m.userId} value={m.userId}>{m.user.name}</option>
+                        ))
+                      : users.map(u => u.id !== user.id && (
+                          <option key={u.id} value={u.id}>{u.name}</option>
+                        ))
+                    }
+                  </select>
+                </div>
+              )}
               <div className="form-group"><label>Due Date</label><input type="date" value={taskDue} onChange={e => setTaskDue(e.target.value)} /></div>
               <button className="btn btn-primary btn-full" onClick={handleSaveTask}>Save Task</button>
             </div>
@@ -295,10 +316,31 @@ export default function Modals({ isOpen, onClose, user, onSuccess, selectedTask,
                 <div>
                   <div style={{ color: 'var(--muted2)', fontSize: '10px', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '4px' }}>Assignee</div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    <div style={{ width: '22px', height: '22px', borderRadius: '6px', background: 'var(--accent)', color: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 'bold' }}>
-                      {user.name[0]}
-                    </div>
-                    <span style={{ fontWeight: 600 }}>{user.name}</span>
+                    {(() => {
+                      let assignedUser = null;
+                      if (selectedTask.assigneeId === user.id) {
+                        assignedUser = user;
+                      } else {
+                        const proj = projects.find(p => p.id === selectedTask.projectId);
+                        assignedUser = proj?.members?.find((m: any) => m.userId === selectedTask.assigneeId)?.user;
+                        if (!assignedUser && user.role === 'admin') {
+                          assignedUser = users.find(u => u.id === selectedTask.assigneeId);
+                        }
+                      }
+                      
+                      if (!assignedUser) {
+                        return <span style={{ fontWeight: 600, color: 'var(--muted)' }}>Unassigned</span>;
+                      }
+
+                      return (
+                        <>
+                          <div style={{ width: '22px', height: '22px', borderRadius: '6px', background: assignedUser.color || 'var(--accent)', color: '#000', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '10px', fontWeight: 'bold' }}>
+                            {assignedUser.name[0].toUpperCase()}
+                          </div>
+                          <span style={{ fontWeight: 600 }}>{assignedUser.name}</span>
+                        </>
+                      );
+                    })()}
                   </div>
                 </div>
                 <div>
@@ -314,16 +356,26 @@ export default function Modals({ isOpen, onClose, user, onSuccess, selectedTask,
               </div>
 
               <div style={{ display: 'flex', gap: '10px', borderTop: '1px solid var(--border)', paddingTop: '20px', flexWrap: 'wrap' }}>
-                <button className="btn btn-ghost btn-sm" onClick={() => setModalOpen?.('task')}>Edit Task</button>
-                {selectedTask.status !== 'done' ? (
-                  <button className="btn btn-primary btn-sm" onClick={() => handleUpdateTaskStatus(selectedTask.id, 'done')}>Mark Done ✓</button>
-                ) : (
-                  <button className="btn btn-ghost btn-sm" onClick={() => handleUpdateTaskStatus(selectedTask.id, 'todo')}>Re-open</button>
+                {(user.role === 'admin' || selectedTask.creatorId === user.id) && (
+                  <button className="btn btn-ghost btn-sm" onClick={() => setModalOpen?.('task')}>Edit Task</button>
                 )}
-                {selectedTask.status === 'todo' && (
-                  <button className="btn btn-ghost btn-sm" onClick={() => handleUpdateTaskStatus(selectedTask.id, 'inprogress')}>Start →</button>
+                
+                {(user.role === 'admin' || selectedTask.creatorId === user.id || selectedTask.assigneeId === user.id) && (
+                  <>
+                    {selectedTask.status !== 'done' ? (
+                      <button className="btn btn-primary btn-sm" onClick={() => handleUpdateTaskStatus(selectedTask.id, 'done')}>Mark Done ✓</button>
+                    ) : (
+                      <button className="btn btn-ghost btn-sm" onClick={() => handleUpdateTaskStatus(selectedTask.id, 'todo')}>Re-open</button>
+                    )}
+                    {selectedTask.status === 'todo' && (
+                      <button className="btn btn-ghost btn-sm" onClick={() => handleUpdateTaskStatus(selectedTask.id, 'inprogress')}>Start →</button>
+                    )}
+                  </>
                 )}
-                <button className="btn btn-danger btn-sm" onClick={() => handleDeleteTask(selectedTask.id)}>Delete</button>
+
+                {(user.role === 'admin' || selectedTask.creatorId === user.id) && (
+                  <button className="btn btn-danger btn-sm" onClick={() => handleDeleteTask(selectedTask.id)}>Delete</button>
+                )}
               </div>
             </div>
           </>

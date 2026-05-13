@@ -120,7 +120,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
 
           {error && <div style={{ color: 'var(--red)', fontSize: '13px' }}>{error}</div>}
 
-          <form onSubmit={handleSubmit} style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
+          <form onSubmit={handleSubmit} autoComplete="off" style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {!isLogin && (
               <div className="form-group">
                 <label>Full Name</label>
@@ -129,7 +129,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
             )}
             <div className="form-group">
               <label>Email</label>
-              <input type="email" required value={email} onChange={e => setEmail(e.target.value)} placeholder="you@company.com" />
+              <input type="email" required autoComplete="off" value={email} onChange={e => setEmail(e.target.value)} placeholder="you@company.com" />
             </div>
             <div className="form-group">
               <label>Password</label>
@@ -137,6 +137,7 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
                 <input 
                   type={showPassword ? "text" : "password"} 
                   required 
+                  autoComplete="new-password"
                   value={password} 
                   onChange={e => handlePasswordChange(e.target.value)} 
                   placeholder="••••••••" 

@@ -230,6 +230,7 @@ app.post('/api/tasks', authMiddleware, async (req: any, res: any) => {
     const task = await prisma.task.create({
       data: {
         title, description, status, priority, projectId, assigneeId,
+        creatorId: req.user.id,
         dueDate: dueDate ? new Date(dueDate) : null
       }
     });
@@ -251,28 +252,40 @@ app.put('/api/tasks/:id', authMiddleware, async (req: any, res: any) => {
     const existing = await prisma.task.findUnique({ where: { id } });
     if (!existing) return res.status(404).json({ error: 'Task not found' });
 
-    const isMember = await prisma.projectMember.findFirst({
-      where: { projectId: existing.projectId ?? undefined, userId: req.user.id }
-    });
+    const isAdmin = req.user.role === 'admin';
+    const isCreator = existing.creatorId === req.user.id;
+    const isAssignee = existing.assigneeId === req.user.id;
 
-    if (req.user.role !== 'admin' && existing.assigneeId !== req.user.id) {
-      return res.status(403).json({ error: 'Unauthorized to edit this task. You can only update tasks assigned to you.' });
+    if (!isAdmin && !isCreator && !isAssignee) {
+      return res.status(403).json({ error: 'Unauthorized to edit this task' });
     }
 
-    const existingTask = await prisma.task.findUnique({ where: { id } });
-    const task = await prisma.task.update({
-      where: { id },
-      data: {
+    let dataToUpdate: any = {};
+    
+    if (isAdmin || isCreator) {
+      dataToUpdate = {
         title: title !== undefined ? title : existing.title,
         description: description !== undefined ? description : existing.description,
         status: status !== undefined ? status : existing.status,
         priority: priority !== undefined ? priority : existing.priority,
         assigneeId: assigneeId !== undefined ? assigneeId : existing.assigneeId,
         dueDate: dueDate !== undefined ? (dueDate ? new Date(dueDate) : null) : existing.dueDate
+      };
+    } else if (isAssignee) {
+      if (title !== undefined || description !== undefined || priority !== undefined || assigneeId !== undefined || dueDate !== undefined) {
+        return res.status(403).json({ error: 'Unauthorized to edit task details. You can only update status.' });
       }
+      dataToUpdate = {
+        status: status !== undefined ? status : existing.status
+      };
+    }
+
+    const task = await prisma.task.update({
+      where: { id },
+      data: dataToUpdate
     });
     const userName = req.user.name || (await prisma.user.findUnique({ where: { id: req.user.id } }))?.name || 'User';
-    const taskTitle = title || existingTask?.title || 'Task';
+    const taskTitle = title || existing?.title || 'Task';
     await prisma.activity.create({
       data: { text: `${userName} updated task "${taskTitle}" to ${task.status}`, color: '#e8ff47' }
     });
@@ -282,8 +295,15 @@ app.put('/api/tasks/:id', authMiddleware, async (req: any, res: any) => {
   }
 });
 
-app.delete('/api/tasks/:id', authMiddleware, adminMiddleware, async (req: any, res: any) => {
+app.delete('/api/tasks/:id', authMiddleware, async (req: any, res: any) => {
   try {
+    const existing = await prisma.task.findUnique({ where: { id: req.params.id } });
+    if (!existing) return res.status(404).json({ error: 'Task not found' });
+
+    if (req.user.role !== 'admin' && existing.creatorId !== req.user.id) {
+      return res.status(403).json({ error: 'Unauthorized to delete this task' });
+    }
+
     await prisma.task.delete({ where: { id: req.params.id } });
     res.json({ success: true });
   } catch (error) {

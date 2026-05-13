@@ -8,7 +8,7 @@ interface AuthProps {
 const Auth: React.FC<AuthProps> = ({ onLogin }) => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('password123');
+  const [password, setPassword] = useState('');
   const [name, setName] = useState('');
   const [error, setError] = useState('');
   const [passStrength, setPassStrength] = useState({ score: 0, label: '', color: '' });
@@ -58,7 +58,12 @@ const Auth: React.FC<AuthProps> = ({ onLogin }) => {
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Something went wrong');
-      onLogin(data.token, data.user);
+      if (isLogin) {
+        onLogin(data.token, data.user);
+      } else {
+        setIsLogin(true);
+        setPassword('');
+      }
     } catch (err: any) {
       setError(err.message);
     }
